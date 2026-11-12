@@ -40,7 +40,24 @@ cp .env.example .env          # PowerShell: Copy-Item .env.example .env
 docker compose up -d          # starts PostgreSQL 17 + pgvector on port 5433
 uv sync                       # creates the Python environment and installs dependencies
 uv run python scripts/check_db.py
+uv run pytest
 ```
+
+Save one raw page of open tenders from PNCP (electronic auctions, proposals closing in the next 30 days):
+
+```bash
+uv run python scripts/fetch_sample.py
+uv run python scripts/fetch_sample.py --state SP --page-size 20
+```
+
+The JSON goes to `data/raw/` (ignored by Git) and the script prints how often each field is filled.
+
+## Design decisions
+
+- **`pncp_control_number` is the primary key.** It is the PNCP's own identifier, so running the collector twice never duplicates a tender (idempotent collection).
+- **The `payload` column keeps the raw API response.** If a field turns out to be needed later, there is no need to collect everything again.
+- **`collection_runs` records every run** (pages, new tenders, errors), which feeds the collection reliability numbers published here.
+- **PNCP notes live in [`docs/pncp-notes.md`](docs/pncp-notes.md):** endpoints, parameters and the quirks found while testing the API.
 
 ## Glossary
 
@@ -57,6 +74,7 @@ uv run python scripts/check_db.py
 | Date | What changed |
 | --- | --- |
 | 2026-11-10 | Repository created: Docker Compose with Postgres + pgvector, initial schema (`tenders`, `collection_runs`). |
+| 2026-11-11 | PNCP client for open-proposal tenders, raw page sample script with field coverage report, no-comments convention. |
 
 ## Disclaimer
 
