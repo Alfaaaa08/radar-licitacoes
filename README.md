@@ -52,11 +52,23 @@ uv run python scripts/fetch_sample.py --state SP --page-size 20
 
 The JSON goes to `data/raw/` (ignored by Git) and the script prints how often each field is filled.
 
+Collect open tenders into PostgreSQL, one state at a time:
+
+```bash
+uv run python scripts/collect.py --states SP --max-pages 2
+uv run python scripts/collect.py
+```
+
+Running it again is safe: tenders already stored are not duplicated, and every run is recorded in `collection_runs`.
+
 ## Design decisions
 
 - **`pncp_control_number` is the primary key.** It is the PNCP's own identifier, so running the collector twice never duplicates a tender (idempotent collection).
 - **The `payload` column keeps the raw API response.** If a field turns out to be needed later, there is no need to collect everything again.
 - **`collection_runs` records every run** (pages, new tenders, errors), which feeds the collection reliability numbers published here.
+- **The collector slices by state.** One broad query for all open electronic auctions took 51 seconds and returned HTTP 500, while the same query for one state answered in 0.2 seconds.
+- **Transient failures are retried, bad requests are not.** Timeouts, HTTP 429 and HTTP 5xx are retried with a delay that doubles (2s, 4s, 8s, up to 60s). A state that still fails is recorded in `collection_runs.errors` and the run moves on to the next state.
+- **Unchanged tenders are not rewritten.** The upsert only updates a row when the API payload changed, so `updated_at` means "the PNCP changed this tender".
 - **PNCP notes live in [`docs/pncp-notes.md`](docs/pncp-notes.md):** endpoints, parameters and the quirks found while testing the API.
 
 ## Glossary
@@ -75,6 +87,7 @@ The JSON goes to `data/raw/` (ignored by Git) and the script prints how often ea
 | --- | --- |
 | 2026-11-10 | Repository created: Docker Compose with Postgres + pgvector, initial schema (`tenders`, `collection_runs`). |
 | 2026-11-11 | PNCP client for open-proposal tenders, raw page sample script with field coverage report, no-comments convention. |
+| 2026-11-12 | Collector: slicing by state, retries with backoff, idempotent upsert into `tenders`, run log in `collection_runs`. Page size capped at 50 after the API rejected 60. |
 
 ## Disclaimer
 

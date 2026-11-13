@@ -19,6 +19,10 @@ class RateLimitedError(PncpError):
     pass
 
 
+class ServerError(PncpError):
+    pass
+
+
 @dataclass(frozen=True)
 class TenderPage:
     records: list[dict]
@@ -75,6 +79,8 @@ class PncpClient:
             return TenderPage([], 0, 0, page, 0, {})
         if response.status_code == 429:
             raise RateLimitedError("PNCP returned HTTP 429 (too many requests)")
+        if response.status_code >= 500:
+            raise ServerError(f"PNCP returned HTTP {response.status_code}: {response.text[:200]}")
         if response.is_error:
             raise PncpError(f"PNCP returned HTTP {response.status_code}: {response.text[:200]}")
 

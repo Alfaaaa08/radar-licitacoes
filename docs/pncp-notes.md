@@ -72,5 +72,14 @@ Test of 2026-11-11, modality 6, `dataFinal=20261211`, page 1.
 - Filled in all 50 records: every field used by the schema above, plus `numeroCompra`, `processo`, `srp`, `modoDisputaId`, `situacaoCompraId` and the `amparoLegal` object.
 - Partly filled: `linkSistemaOrigem` (41/50), `informacaoComplementar` (33/50).
 - Almost always empty: `emendaParlamentar`, `fontesOrcamentarias`, `linkProcessoEletronico` (0/50), `valorTotalHomologado` and `justificativaPresencial` (3/50), `orgaoSubRogado` and `unidadeSubRogada` (1/50, and `null` otherwise).
+- Response time depends on how much the query has to count. Same page size 50, modality 6:
+
+| Query | Result |
+| --- | --- |
+| `dataFinal=20261211`, all states | HTTP 500 after 51.3 s |
+| `dataFinal=20261118`, all states | HTTP 200 in 0.24 s |
+| `dataFinal=20261211`, `uf=SP` | HTTP 200 in 0.21 s |
+
+- The collector therefore queries one state at a time. Only SP and the one-week window were measured; other states are assumed to behave like SP.
 - Date formats: check in the saved JSON.
 - Calls before HTTP 429: not reached yet.
