@@ -1,19 +1,22 @@
-"""Check that the database is up, with pgvector and the expected tables.
-
-Usage: uv run python scripts/check_db.py
-"""
-
 import sys
+
+import psycopg
 
 from radar.db import connect
 
-EXPECTED_TABLES = {"tenders", "collection_runs"}
+EXPECTED_TABLES = {
+    "tenders",
+    "collection_runs",
+    "tender_documents",
+    "document_pages",
+    "schema_migrations",
+}
 
 
 def main() -> int:
     try:
         conn = connect()
-    except Exception as exc:  # noqa: BLE001
+    except (psycopg.Error, RuntimeError) as exc:
         print(f"[FAIL] Could not connect to the database: {exc}")
         print("       Is the container running? Try: docker compose ps")
         return 1
@@ -40,10 +43,11 @@ def main() -> int:
         missing = EXPECTED_TABLES - set(tables)
         if missing:
             print(f"[FAIL] Missing tables: {', '.join(sorted(missing))}")
+            print("       Try: uv run python scripts/migrate.py")
             return 1
         print(f"[OK] Tables: {', '.join(tables)}")
 
-    print("\nAll good. The database is ready for tomorrow's collector.")
+    print("\nAll good. The database is ready.")
     return 0
 
 

@@ -39,6 +39,7 @@ Requirements: [Docker Desktop](https://www.docker.com/products/docker-desktop/) 
 cp .env.example .env          # PowerShell: Copy-Item .env.example .env
 docker compose up -d          # starts PostgreSQL 17 + pgvector on port 5433
 uv sync                       # creates the Python environment and installs dependencies
+uv run python scripts/migrate.py
 uv run python scripts/check_db.py
 uv run pytest
 ```
@@ -61,6 +62,28 @@ uv run python scripts/collect.py
 
 Running it again is safe: tenders already stored are not duplicated, and every run is recorded in `collection_runs`.
 
+Tag the tenders that look like IT (keyword baseline, no AI), then download their notices and extract the text page by page:
+
+```bash
+uv run python scripts/tag_it.py
+uv run python scripts/fetch_documents.py --limit-tenders 20
+```
+
+PDFs go to `data/pdfs/` (ignored by Git). Text goes to `document_pages`, one row per page, so every future citation can point to a page number.
+
+Look at what was collected (runs, tenders by state, deadlines, values, date formats, field coverage):
+
+```bash
+uv run python scripts/profile_data.py
+```
+
+Find out how fast PNCP can be called before it answers HTTP 429 (sends up to 30 small requests in a row):
+
+```bash
+uv run python scripts/probe_rate_limit.py
+uv run python scripts/probe_rate_limit.py --pause 0.5
+```
+
 ## Design decisions
 
 - **`pncp_control_number` is the primary key.** It is the PNCP's own identifier, so running the collector twice never duplicates a tender (idempotent collection).
@@ -69,6 +92,10 @@ Running it again is safe: tenders already stored are not duplicated, and every r
 - **The collector slices by state.** One broad query for all open electronic auctions took 51 seconds and returned HTTP 500, while the same query for one state answered in 0.2 seconds.
 - **Transient failures are retried, bad requests are not.** Timeouts, HTTP 429 and HTTP 5xx are retried with a delay that doubles (2s, 4s, 8s, up to 60s). A state that still fails is recorded in `collection_runs.errors` and the run moves on to the next state.
 - **Unchanged tenders are not rewritten.** The upsert only updates a row when the API payload changed, so `updated_at` means "the PNCP changed this tender".
+- **Text is stored per page.** Every extracted field must cite a quote and a page, and a quote can be checked mechanically against `document_pages`.
+- **Scanned PDFs are flagged, not read.** A PDF where at least half of the pages have fewer than 50 characters is marked `scanned` and left for later (OCR is out of scope for v1).
+- **The IT filter is a plain keyword baseline.** It only looks at the tender object and ignores ambiguous words (for example `servidor` also means civil servant). Its precision and recall will be measured against the AI classifier.
+- **Schema changes are migrations.** `db/init.sql` is the baseline created by Docker; everything after it lives in `db/migrations/` and is applied by `scripts/migrate.py`.
 - **PNCP notes live in [`docs/pncp-notes.md`](docs/pncp-notes.md):** endpoints, parameters and the quirks found while testing the API.
 
 ## Glossary
@@ -88,6 +115,8 @@ Running it again is safe: tenders already stored are not duplicated, and every r
 | 2026-11-10 | Repository created: Docker Compose with Postgres + pgvector, initial schema (`tenders`, `collection_runs`). |
 | 2026-11-11 | PNCP client for open-proposal tenders, raw page sample script with field coverage report, no-comments convention. |
 | 2026-11-12 | Collector: slicing by state, retries with backoff, idempotent upsert into `tenders`, run log in `collection_runs`. Page size capped at 50 after the API rejected 60. |
+| 2026-11-14 | Documents: migrations, IT keyword tagging, notice download, per-page PDF text extraction with scanned-PDF detection. |
+| 2026-11-13 | Data profile script (`profile_data.py`) and rate limit probe (`probe_rate_limit.py`), to turn the first collection into documented facts about PNCP. |
 
 ## Disclaimer
 

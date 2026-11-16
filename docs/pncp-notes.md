@@ -35,6 +35,26 @@ Fields used by the schema so far:
 | `dataPublicacaoPncp` | `published_at` |
 | `dataEncerramentoProposta` | `proposals_close_at` |
 
+## Documents
+
+Served by the integration API, not the query API: base `https://pncp.gov.br/pncp-api`.
+
+| Purpose | Endpoint |
+| --- | --- |
+| List the documents of a tender | `GET /v1/orgaos/{cnpj}/compras/{year}/{sequence}/arquivos` |
+| Download one document | `GET /v1/orgaos/{cnpj}/compras/{year}/{sequence}/arquivos/{documentSequence}` |
+
+`{cnpj}`, `{year}` and `{sequence}` are `orgaoEntidade.cnpj`, `anoCompra` and `sequencialCompra` of the tender.
+
+Fields listed by the manual: `sequencialDocumento`, `url`, `tipoDocumentoId`, `tipoDocumentoNome`, `titulo`, `dataPublicacaoPncp`. The manual does not say whether the list is a bare array or wrapped in `documentos`, so the client accepts both.
+
+To verify against the live API:
+
+- The `tipoDocumentoId` of an edital. The manual points to the domain table without listing it, so the collector matches on `tipoDocumentoNome` containing "edital".
+- Whether documents carry an active/inactive flag (`statusAtivo` or `ativo`). Documents flagged `false` are skipped.
+- Which file types occur besides PDF, and how large they get. Downloads above 80 MB are aborted.
+- Whether `Content-Disposition` carries the original file name. The client ignores it and detects the type from the first bytes.
+
 ## Modality codes
 
 | Code | Name |
@@ -81,5 +101,17 @@ Test of 2026-11-11, modality 6, `dataFinal=20261211`, page 1.
 | `dataFinal=20261211`, `uf=SP` | HTTP 200 in 0.21 s |
 
 - The collector therefore queries one state at a time. Only SP and the one-week window were measured; other states are assumed to behave like SP.
-- Date formats: check in the saved JSON.
-- Calls before HTTP 429: not reached yet.
+- Date formats: see "Collected data" below.
+- Calls before HTTP 429: see "Collected data" below.
+
+## Collected data
+
+Run `uv run python scripts/profile_data.py` after a full collection and `uv run python scripts/probe_rate_limit.py`, then fill in:
+
+- Tenders collected, and how that compares with the 17,094 reported by the unsliced query:
+- States with errors or empty results:
+- Date formats found in `dataPublicacaoPncp` and `dataEncerramentoProposta` (shapes with more than one format, or `null`):
+- Tenders whose deadline already passed at collection time:
+- Estimated values equal to zero, and the largest values (typos?):
+- Shortest object descriptions (too short to classify?):
+- Safe call rate: successful calls in a row before the first failure, and the pause used:

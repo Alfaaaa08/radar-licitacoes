@@ -23,6 +23,22 @@ class ServerError(PncpError):
     pass
 
 
+class NotFoundError(PncpError):
+    pass
+
+
+def raise_for_status(response: httpx.Response) -> None:
+    status = response.status_code
+    if status == 429:
+        raise RateLimitedError("PNCP returned HTTP 429 (too many requests)")
+    if status == 404:
+        raise NotFoundError("PNCP returned HTTP 404")
+    if status >= 500:
+        raise ServerError(f"PNCP returned HTTP {status}: {response.text[:200]}")
+    if response.is_error:
+        raise PncpError(f"PNCP returned HTTP {status}: {response.text[:200]}")
+
+
 @dataclass(frozen=True)
 class TenderPage:
     records: list[dict]
@@ -77,12 +93,7 @@ class PncpClient:
 
         if response.status_code == 204:
             return TenderPage([], 0, 0, page, 0, {})
-        if response.status_code == 429:
-            raise RateLimitedError("PNCP returned HTTP 429 (too many requests)")
-        if response.status_code >= 500:
-            raise ServerError(f"PNCP returned HTTP {response.status_code}: {response.text[:200]}")
-        if response.is_error:
-            raise PncpError(f"PNCP returned HTTP {response.status_code}: {response.text[:200]}")
+        raise_for_status(response)
 
         try:
             payload = response.json()

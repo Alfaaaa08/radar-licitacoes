@@ -5,6 +5,7 @@ import psycopg
 import pytest
 
 from radar.db import connect
+from radar.migrations import apply_pending
 
 INIT_SQL = Path(__file__).parent.parent / "db" / "init.sql"
 
@@ -22,6 +23,7 @@ def db_conn():
         cur.execute(f"SET search_path TO {schema}, public")
         cur.execute(INIT_SQL.read_text(encoding="utf-8"))
     conn.commit()
+    apply_pending(conn)
 
     yield conn
 

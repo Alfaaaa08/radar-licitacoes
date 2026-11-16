@@ -59,3 +59,52 @@ class FlakyClient:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome
+
+
+def make_pdf_bytes(pages: list[str]) -> bytes:
+    import pymupdf
+
+    document = pymupdf.open()
+    for text in pages:
+        page = document.new_page()
+        if text:
+            page.insert_textbox(pymupdf.Rect(50, 50, 550, 780), text, fontsize=11)
+    data = document.tobytes()
+    document.close()
+    return data
+
+
+LONG_TEXT = "Proposals must be submitted until the deadline stated in this tender notice. " * 3
+
+
+class FakeDocumentsClient:
+    def __init__(self, listings: dict, behaviors: dict | None = None):
+        self.listings = listings
+        self.behaviors = {key: list(value) for key, value in (behaviors or {}).items()}
+        self.list_calls = 0
+        self.download_calls: list[int] = []
+
+    def list_documents(self, cnpj, year, sequence):
+        self.list_calls += 1
+        outcome = self.listings[(cnpj, year, sequence)]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+    def download_document(self, cnpj, year, sequence, document_sequence, destination):
+        import hashlib
+
+        from radar.documents import DownloadedFile, detect_file_type
+
+        self.download_calls.append(document_sequence)
+        queue = self.behaviors[document_sequence]
+        outcome = queue.pop(0) if len(queue) > 1 else queue[0]
+        if isinstance(outcome, BaseException):
+            raise outcome
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(outcome)
+        return DownloadedFile(
+            size_bytes=len(outcome),
+            sha256=hashlib.sha256(outcome).hexdigest(),
+            file_type=detect_file_type(outcome[:8]),
+        )

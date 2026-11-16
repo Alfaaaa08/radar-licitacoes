@@ -7,14 +7,8 @@ import httpx
 import psycopg
 from psycopg.types.json import Jsonb
 
-from radar.pncp import (
-    MAX_PAGE_SIZE,
-    PncpClient,
-    PncpError,
-    RateLimitedError,
-    ServerError,
-    TenderPage,
-)
+from radar.pncp import MAX_PAGE_SIZE, PncpClient, PncpError, TenderPage
+from radar.retry import DEFAULT_RETRY, RetryPolicy, retry_call
 
 BRAZILIAN_STATES = (
     "AC",
@@ -48,7 +42,6 @@ BRAZILIAN_STATES = (
 
 BRASILIA_OFFSET = timezone(timedelta(hours=-3))
 
-RETRYABLE_ERRORS = (RateLimitedError, ServerError, httpx.TransportError)
 FETCH_ERRORS = (PncpError, httpx.TransportError)
 
 UPSERT_SQL = """
@@ -79,19 +72,6 @@ RETURNING (xmax = 0) AS inserted
 
 class MalformedRecordError(Exception):
     pass
-
-
-@dataclass(frozen=True)
-class RetryPolicy:
-    max_attempts: int = 5
-    base_delay: float = 2.0
-    max_delay: float = 60.0
-
-    def delay(self, attempt: int) -> float:
-        return min(self.max_delay, self.base_delay * 2**attempt)
-
-
-DEFAULT_RETRY = RetryPolicy()
 
 
 @dataclass
@@ -146,15 +126,7 @@ def fetch_with_retry(
     sleep: Callable[[float], None],
     **params: object,
 ) -> TenderPage:
-    attempt = 0
-    while True:
-        try:
-            return client.fetch_open_tenders(**params)
-        except RETRYABLE_ERRORS:
-            attempt += 1
-            if attempt >= policy.max_attempts:
-                raise
-            sleep(policy.delay(attempt - 1))
+    return retry_call(lambda: client.fetch_open_tenders(**params), policy, sleep)
 
 
 def start_run(conn: psycopg.Connection) -> int:
