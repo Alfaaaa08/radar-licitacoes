@@ -71,6 +71,15 @@ uv run python scripts/fetch_documents.py --limit-tenders 20
 
 PDFs go to `data/pdfs/` (ignored by Git). Text goes to `document_pages`, one row per page, so every future citation can point to a page number.
 
+Build the hand-labeled gold set (rules in [`docs/annotation-guide.md`](docs/annotation-guide.md)):
+
+```bash
+uv run python scripts/select_gold.py
+uv run python scripts/new_annotation.py --next --annotator YOUR_NAME
+uv run python scripts/show_pages.py CONTROL_NUMBER --hints
+uv run python scripts/validate_gold.py
+```
+
 Look at what was collected (runs, tenders by state, deadlines, values, date formats, field coverage):
 
 ```bash
@@ -95,6 +104,9 @@ uv run python scripts/probe_rate_limit.py --pause 0.5
 - **Text is stored per page.** Every extracted field must cite a quote and a page, and a quote can be checked mechanically against `document_pages`.
 - **Scanned PDFs are flagged, not read.** A PDF where at least half of the pages have fewer than 50 characters is marked `scanned` and left for later (OCR is out of scope for v1).
 - **The IT filter is a plain keyword baseline.** It only looks at the tender object and ignores ambiguous words (for example `servidor` also means civil servant). Its precision and recall will be measured against the AI classifier.
+- **Every extracted field carries evidence.** The schema (`src/radar/schema.py`) has two states per field, `found` with a value, a page and a quote, or `not_found` with nothing. A `found` field without evidence is invalid, so an answer without a source cannot exist.
+- **Quotes are verified mechanically.** `src/radar/evidence.py` checks that each quote really appears on the cited page, ignoring case, accents and line breaks. The same check will run on the AI output, and it already runs on the gold annotations.
+- **The gold set is fixed before it is annotated.** `scripts/select_gold.py` picks 20 tenders with a seeded, reproducible shuffle, mixing federal, state and municipal agencies and at most two per state within each. It refuses to run again so the set cannot drift after annotation starts.
 - **Schema changes are migrations.** `db/init.sql` is the baseline created by Docker; everything after it lives in `db/migrations/` and is applied by `scripts/migrate.py`.
 - **PNCP notes live in [`docs/pncp-notes.md`](docs/pncp-notes.md):** endpoints, parameters and the quirks found while testing the API.
 
@@ -115,8 +127,9 @@ uv run python scripts/probe_rate_limit.py --pause 0.5
 | 2026-11-10 | Repository created: Docker Compose with Postgres + pgvector, initial schema (`tenders`, `collection_runs`). |
 | 2026-11-11 | PNCP client for open-proposal tenders, raw page sample script with field coverage report, no-comments convention. |
 | 2026-11-12 | Collector: slicing by state, retries with backoff, idempotent upsert into `tenders`, run log in `collection_runs`. Page size capped at 50 after the API rejected 60. |
-| 2026-11-14 | Documents: migrations, IT keyword tagging, notice download, per-page PDF text extraction with scanned-PDF detection. |
 | 2026-11-13 | Data profile script (`profile_data.py`) and rate limit probe (`probe_rate_limit.py`), to turn the first collection into documented facts about PNCP. |
+| 2026-11-14 | Documents: migrations, IT keyword tagging, notice download, per-page PDF text extraction with scanned-PDF detection. |
+| 2026-11-15 | Extraction schema with per-field evidence, quote verifier, annotation guide, gold set selection and annotation tooling. |
 
 ## Disclaimer
 
